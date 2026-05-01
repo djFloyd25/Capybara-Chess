@@ -1,0 +1,22 @@
+@baseUrl = http://localhost:8080/api/v1
+
+### Get all users
+GET {{baseUrl}}/users
+Accept: application/json
+
+### Create a user
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "id": 1,
+  "username": "capychess99",
+  "email": "test@example.com"
+}
+
+### Get user by ID
+GET {{baseUrl}}/users/1
+Accept: application/json
+
+### Delete user by ID
+DELETE {{baseUrl}}/users/1

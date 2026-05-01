@@ -1,0 +1,51 @@
+Instructions for how to handle the backend:
+
+When trying to access the postgres database within docker run
+docker exec -it postgres-spring-boot bash. Ctrl d to leave.
+
+Then you can run psql -U capybara -d capybara_chess, 
+where capybara is the username and capybara_chess is the database
+because if you don't specify -d then it assumes -U and -d both are the same.
+
+Once you're in as superuser(#), you can run \dt to list tables,
+\l to list all databases and any SQL needed. Ctrl d to leave.
+
+To connect to a database, \c "name". So for our main database,
+\c capybara_chess. To leave, input \q.
+
+To look at the schema of a table input \d users.
+
+Spring Boot Section:
+
+When trying to make a table in your database, add @Entity to the 
+top of the class. It will set the class to represent a table.
+For columns, add @Id to your instance variables and the top
+one will be the primary key. If you want the table to have a 
+different name, add @Table(name = "users") under entity to give
+a unique name that's not the class name.
+
+You can add an interface that extends JpaRepository. It is an 
+interface that allows you to perform database operations without 
+writing manual SQL code. The first paramater is the Entity Type, T,
+and the 2nd is the ID Type(normally always Integer).
+
+Then you can add a service, which holds business logic for application.
+It connects the Controller Layer(handles HTTP requests) 
+and the Repository Layer(interacts with the database). When making
+a function like getUsers() in the service, you don't normally want
+to return an Entity. You want to map into a Data Transfer Object for 
+the client. This is because there might be variables like a password
+that you don't want to return to the client. This can be done by
+return userRepository.findAll().stream().map().
+
+Normal Chain from Request to SQL:
+
+HTTP Request
+     ↓
+UserController        ← "What do you want?"
+     ↓
+UserService           ← "Here's the business logic"
+     ↓
+UserRepository        ← "Here's the database query"
+     ↓
+PostgreSQL

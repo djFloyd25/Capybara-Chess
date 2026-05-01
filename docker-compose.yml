@@ -1,0 +1,45 @@
+services:
+  db:
+    container_name: postgres-spring-boot
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: capybara
+      POSTGRES_PASSWORD: capybara_chess
+      POSTGRES_DB: capybara_chess
+      PGDATA: /data/postgres
+    volumes:
+      - db_data:/data/postgres
+    ports:
+      - "5332:5432"
+    networks:
+      - db
+    restart: unless-stopped
+
+  backend:
+    build: ./backend/spring-boot
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/capybara_chess
+      SPRING_DATASOURCE_USERNAME: capybara
+      SPRING_DATASOURCE_PASSWORD: capybara_chess
+    depends_on:
+      - db
+    networks:
+      - db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    depends_on:
+      - backend
+
+networks:
+  db:
+    driver: bridge
+
+volumes:
+  db_data:
