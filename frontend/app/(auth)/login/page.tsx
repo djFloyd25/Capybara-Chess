@@ -6,8 +6,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff } from "lucide-react";
-
-const API = "http://localhost:8080/api/v1";
+import { publicFetch, setToken, ApiError } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,22 +22,70 @@ export default function LoginPage() {
     ? "Welcome back! Ready to crush some openings? 🏆"
     : "Let's start your chess journey together! ♟️";
 
+  const validate = (): string | null => {
+    if (!email.trim()) return "Please enter your email.";
+    if (!/\S+@\S+\.\S+/.test(email)) return "Please enter a valid email address.";
+    if (!password) return "Please enter your password.";
+    if (mode === "signup") {
+      if (!username.trim()) return "Please enter your username.";
+      if (password.length < 8) return "Password must be at least 8 characters.";
+    }
+    return null;
+  };
+
+  // Maps HTTP status codes to human-readable messages
+  // Backend should return:
+  //   401 → wrong password
+  //   404 → username not found  (needs explicit handling in AuthController)
+  //   409 → username or email already taken  (for register)
+  //   400 → bad request / validation error
+  const loginErrorMessage = (status: number): string => {
+    switch (status) {
+      case 403: return "No user found or incorrect password. Please try again.";
+      case 400: return "Invalid details. Please check your input.";
+      default:  return status.toString();
+    }
+  };
+
+  const registerErrorMessage = (status: number): string => {
+    switch (status) {
+      case 409: return "That username or email is already taken.";
+      case 400: return "Invalid details. Please check your input.";
+      default:  return "Sign up failed. Please try again.";
+    }
+  };
+
   const handleSubmit = async () => {
+    const validationError = validate();
+    if (validationError) { setError(validationError); return; }
+
     setError(null);
     setLoading(true);
     try {
       if (mode === "signup") {
-        const res = await fetch(`${API}/users`, {
+        await publicFetch("/auth/register", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, email }),
+          body: JSON.stringify({ username, email, password }),
         });
-        if (!res.ok) throw new Error("Sign up failed. Try a different email.");
       }
-      // Login auth to be wired to Spring Security later
-      router.push("/");
+
+      const data = await publicFetch("/auth/authenticate", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+
+      setToken(data.jwt);
+      router.push("../openings");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      if (err instanceof ApiError) {
+        setError(
+          mode === "signup"
+            ? registerErrorMessage(err.status)
+            : loginErrorMessage(err.status)
+        );
+      } else {
+        setError("Cannot connect to the server. Make sure the backend is running.");
+      }
     } finally {
       setLoading(false);
     }

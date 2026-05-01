@@ -49,3 +49,30 @@ UserService           ← "Here's the business logic"
 UserRepository        ← "Here's the database query"
      ↓
 PostgreSQL
+
+Ive now added CustomUserDetailsService and SecurityConfig. So when
+a user puts in their credentials this is the work flow:
+
+Browser POST /api/v1/auth/login  { username, password }
+         ↓
+AuthController
+  - receives the request
+  - calls AuthenticationManager.authenticate()
+         ↓
+AuthenticationManager  (Spring built-in, wired in SecurityConfig)
+  - calls CustomUserDetailsService.loadUserByUsername()
+         ↓
+CustomUserDetailsService
+  - calls UserRepository.findByUsername()
+  - returns your User object (which implements UserDetails)
+         ↓
+AuthenticationManager  (back here now)
+  - calls passwordEncoder.matches(rawPassword, user.getPassword())
+  - if it matches → authentication succeeds
+  - if not → throws BadCredentialsException
+         ↓
+AuthController  (back here on success)
+  - calls JwtUtil.generateToken(user)
+  - returns { token: "eyJ..." } to the browser
+         ↓
+Browser stores the token, redirects to dashboard

@@ -1,2 +1,34 @@
-###
-GET http://localhost:8080/api/v1/users
+@baseUrl = http://localhost:8080/api/v1
+
+### Login (get JWT)
+POST {{baseUrl}}/auth/authenticate
+Content-Type: application/json
+
+{
+    "email": "user234@example.com",
+    "password": "password"
+}
+
+### Register new user
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "username": "user234",
+    "email": "user234@example.com",
+    "password": "password123"
+}
+
+### Get all users (requires JWT — paste token below)
+GET {{baseUrl}}/users
+Authorization: Bearer <paste_token_here>
+
+### Create user directly (bypasses hashing — for DB debugging only)
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+    "username": "user234",
+    "email": "user234@example.com",
+    "password": "password"
+}
