@@ -22,10 +22,14 @@ public class User implements UserDetails{
     private Integer id;
     @Column(nullable = false, unique = true)
     private String username;
-    @Column(nullable = false, unique = true)
+    @Column(unique = true)
     private String email;
-    @Column(nullable = false)
     private String password;
+    private String provider;
+    private String providerId;
+    private String chessComUsername;
+    private String liChessUsername;
+
 
     public User() {
     }
@@ -70,6 +74,38 @@ public class User implements UserDetails{
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public void setProvider(String provider) {
+        this.provider = provider;
+    }
+
+    public String getProvider() {
+        return provider;
+    }
+
+    public String getProviderId() {
+        return providerId;
+    }
+
+    public void setProviderId(String providerId) {
+        this.providerId = providerId;
+    }
+
+    public void setChessComUsername(String chessComUsername) {
+        this.chessComUsername = chessComUsername;
+    }
+
+    public String getChessComUsername() {
+        return chessComUsername;
+    }
+
+    public void setLiChessUsername(String liChessUsername) {
+        this.liChessUsername = liChessUsername;
+    }
+
+    public String getLiChessUsername() {
+        return liChessUsername;
     }
 
     @Override

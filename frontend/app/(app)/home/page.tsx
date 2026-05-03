@@ -9,20 +9,21 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import CapybaraMascot from "@/components/CapybaraMascot";
+import { getUsernameFromToken, getProvider } from "@/lib/api";
 import {
   Flame, Trophy, BookOpen, Brain, Swords, ChevronRight,
   Upload, CheckCircle2, TrendingUp, Calendar, Star, Zap
 } from "lucide-react";
 
 const DAILY_LESSONS = [
-  { id: 1, title: "Sicilian Defense",       type: "Opening",  xp: 20, done: true,  icon: BookOpen },
-  { id: 2, title: "Pin Tactics",            type: "Tactics",  xp: 30, done: true,  icon: Brain },
-  { id: 3, title: "Rook Endgames",          type: "Endgame",  xp: 25, done: false, icon: Trophy },
-  { id: 4, title: "Pawn Structure Analysis",type: "Strategy", xp: 20, done: false, icon: TrendingUp },
+  { id: 1, title: "Sicilian Defense",        type: "Opening",  xp: 20, done: true,  icon: BookOpen },
+  { id: 2, title: "Pin Tactics",             type: "Tactics",  xp: 30, done: true,  icon: Brain },
+  { id: 3, title: "Rook Endgames",           type: "Endgame",  xp: 25, done: false, icon: Trophy },
+  { id: 4, title: "Pawn Structure Analysis", type: "Strategy", xp: 20, done: false, icon: TrendingUp },
 ];
 
 const STREAK_DAYS = ["M","T","W","T","F","S","S"];
-const completedDays = [0,1,2,3,4]; // Mon-Fri
+const completedDays = [0, 1, 2, 3, 4];
 
 const ACHIEVEMENTS = [
   { label: "First Win",      icon: "🏆", earned: true  },
@@ -31,19 +32,32 @@ const ACHIEVEMENTS = [
   { label: "Opening Master", icon: "📖", earned: false },
 ];
 
-export default function Dashboard() {
-  const [chessUsername, setChessUsername] = useState("");
+type Platform = "lichess" | "chess.com";
+
+export default function HomePage() {
+  const username = getUsernameFromToken();
+  const provider  = getProvider();
+  const isLichess = provider === "lichess";
+
+  const [platform, setPlatform] = useState<Platform>("lichess");
+  const [importUsername, setImportUsername] = useState(isLichess ? (username ?? "") : "");
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(false);
   const [capyMessage, setCapyMessage] = useState("Good morning! You have 2 lessons left today. Let's go! 🎯");
 
+  const handlePlatformSwitch = (p: Platform) => {
+    setPlatform(p);
+    setImported(false);
+    setImportUsername(p === "lichess" && isLichess ? (username ?? "") : "");
+  };
+
   const handleImport = async () => {
-    if (!chessUsername.trim()) return;
+    if (!importUsername.trim()) return;
     setImporting(true);
     await new Promise((r) => setTimeout(r, 1800));
     setImporting(false);
     setImported(true);
-    setCapyMessage(`Found your games from chess.com! Great work, ${chessUsername}! 🎉`);
+    setCapyMessage(`Found your games from ${platform}! Great work, ${importUsername}! 🎉`);
   };
 
   const completedCount = DAILY_LESSONS.filter((l) => l.done).length;
@@ -59,7 +73,7 @@ export default function Dashboard() {
       >
         <div>
           <h1 className="text-3xl font-bold text-text">
-            Good morning, <span className="text-primary">Player</span> 👋
+            Good morning, <span className="text-primary">{username ?? "Player"}</span> 👋
           </h1>
           <p className="text-text-muted mt-1">Your chess journey continues. Keep the streak alive!</p>
         </div>
@@ -69,10 +83,10 @@ export default function Dashboard() {
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Day Streak",    value: "7",   icon: Flame,      color: "text-orange-500", bg: "bg-orange-50" },
-          { label: "Total XP",      value: "420", icon: Zap,        color: "text-accent",      bg: "bg-amber-50"  },
-          { label: "Games Played",  value: "148", icon: Swords,     color: "text-primary",     bg: "bg-teal/10"   },
-          { label: "Puzzles Done",  value: "32",  icon: Brain,      color: "text-sage",        bg: "bg-sage/10"   },
+          { label: "Day Streak",   value: "7",   icon: Flame,     color: "text-orange-500", bg: "bg-orange-50" },
+          { label: "Total XP",     value: "420", icon: Zap,       color: "text-accent",      bg: "bg-amber-50"  },
+          { label: "Games Played", value: "148", icon: Swords,    color: "text-primary",     bg: "bg-teal/10"   },
+          { label: "Puzzles Done", value: "32",  icon: Brain,     color: "text-sage",        bg: "bg-sage/10"   },
         ].map(({ label, value, icon: Icon, color, bg }, i) => (
           <motion.div
             key={label}
@@ -162,14 +176,32 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          {/* chess.com import */}
+          {/* Game import */}
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload size={18} className="text-primary" />
-                  Import Chess.com Games
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload size={18} className="text-primary" />
+                    Import Your Games
+                  </CardTitle>
+                  {/* Platform toggle */}
+                  <div className="flex bg-surface-alt border border-border rounded-[var(--radius-sm)] p-0.5 gap-0.5">
+                    {(["lichess", "chess.com"] as Platform[]).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => handlePlatformSwitch(p)}
+                        className={`px-3 py-1 rounded-[6px] text-xs font-semibold transition-all duration-200 cursor-pointer ${
+                          platform === p
+                            ? "bg-primary text-white shadow-sm"
+                            : "text-text-muted hover:text-text"
+                        }`}
+                      >
+                        {p === "lichess" ? "Lichess" : "Chess.com"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <AnimatePresence mode="wait">
@@ -189,26 +221,34 @@ export default function Dashboard() {
                         variant="outline"
                         size="sm"
                         className="ml-auto"
-                        onClick={() => { setImported(false); setChessUsername(""); }}
+                        onClick={() => { setImported(false); setImportUsername(isLichess && platform === "lichess" ? (username ?? "") : ""); }}
                       >
                         Re-import
                       </Button>
                     </motion.div>
                   ) : (
-                    <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <motion.div key={platform} initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.15 }}>
+                      {isLichess && platform === "lichess" && (
+                        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-primary/8 border border-primary/20 rounded-[var(--radius-sm)]">
+                          <CheckCircle2 size={14} className="text-primary flex-shrink-0" />
+                          <p className="text-xs text-primary font-medium">Signed in with Lichess — your username is pre-filled.</p>
+                        </div>
+                      )}
                       <p className="text-sm text-text-muted mb-4">
-                        Enter your chess.com username to pull your recent games and generate a personalized study plan.
+                        {platform === "lichess"
+                          ? "Pull your recent Lichess games to generate a personalized study plan."
+                          : "Enter your Chess.com username to pull your recent games and generate a personalized study plan."}
                       </p>
                       <div className="flex gap-3">
                         <Input
-                          placeholder="Your chess.com username"
-                          value={chessUsername}
-                          onChange={(e) => setChessUsername(e.target.value)}
+                          placeholder={platform === "lichess" ? "Your Lichess username" : "Your Chess.com username"}
+                          value={importUsername}
+                          onChange={(e) => setImportUsername(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && handleImport()}
                         />
                         <Button
                           onClick={handleImport}
-                          disabled={importing || !chessUsername.trim()}
+                          disabled={importing || !importUsername.trim()}
                           className="flex-shrink-0"
                         >
                           {importing ? (
@@ -217,9 +257,7 @@ export default function Dashboard() {
                               transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                               className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
                             />
-                          ) : (
-                            <>Import</>
-                          )}
+                          ) : <>Import</>}
                         </Button>
                       </div>
                     </motion.div>
@@ -232,7 +270,7 @@ export default function Dashboard() {
 
         {/* Right column */}
         <div className="space-y-6">
-          {/* Weekly streak calendar */}
+          {/* Weekly streak */}
           <motion.div initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 }}>
             <Card>
               <CardHeader>
@@ -263,9 +301,7 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-text-muted text-center mt-3">
-                  🔥 Keep the streak going today!
-                </p>
+                <p className="text-xs text-text-muted text-center mt-3">🔥 Keep the streak going today!</p>
               </CardContent>
             </Card>
           </motion.div>
@@ -278,9 +314,9 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="space-y-2.5">
                 {[
-                  { label: "Play vs Engine",   href: "/play",     icon: Swords,   variant: "default" as const },
-                  { label: "Study Openings",   href: "/openings", icon: BookOpen, variant: "lime"    as const },
-                  { label: "Personalized Plan",href: "/study",    icon: Brain,    variant: "outline" as const },
+                  { label: "Play vs Engine",    href: "/play",     icon: Swords,   variant: "default" as const },
+                  { label: "Study Openings",    href: "/openings", icon: BookOpen, variant: "lime"    as const },
+                  { label: "Personalized Plan", href: "/study",    icon: Brain,    variant: "outline" as const },
                 ].map(({ label, href, icon: Icon, variant }) => (
                   <Link key={href} href={href}>
                     <Button variant={variant} size="md" className="w-full justify-start gap-3">
