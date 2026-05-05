@@ -76,3 +76,33 @@ AuthController  (back here on success)
   - returns { token: "eyJ..." } to the browser
          ↓
 Browser stores the token, redirects to dashboard
+
+---
+
+Known Gotcha — Java HttpClient + uvicorn: Force HTTP/1.1
+
+Java's HttpClient defaults to HTTP/2. On every new connection it sends an
+"Upgrade: h2c" header to try to switch from HTTP/1.1 to HTTP/2 cleartext.
+uvicorn (the Python ASGI server) does not support h2c, so when it sees that
+Upgrade header on a POST request it drops the body. FastAPI then receives
+a null body and Pydantic returns 422 "Field required" for the entire body.
+
+Spring Boot catches that 422 as a RuntimeException and re-throws it as a
+503 Service Unavailable, so the frontend sees 503. To make it worse, before
+/error was added to the security permitAll list, the 503 caused Spring to
+forward internally to GET /error, which was behind the JWT filter. That
+unauthenticated internal request was rejected with 403 Forbidden — making
+it look like the user's session had expired and logging them out.
+
+Three things combined to hide the real problem:
+  1. Spring Security blocked /error → masked real errors as fake 403s
+  2. The frontend cleared the JWT on any 403 → appeared as logout
+  3. Java HttpClient HTTP/2 upgrade → uvicorn dropped the POST body → 422
+
+The fixes applied:
+  1. Added .requestMatchers("/error").permitAll() in SecurityConfig so real
+     error statuses reach the client instead of being masked as 403.
+  2. Added .version(HttpClient.Version.HTTP_1_1) to the HttpClient builder
+     in PythonModelService so Java never attempts the h2c upgrade.
+  3. Added spring.web.error.include-message=always in application.properties
+     so the 503 body includes the actual exception message for debugging.

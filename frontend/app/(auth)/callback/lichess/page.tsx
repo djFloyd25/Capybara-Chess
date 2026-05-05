@@ -15,6 +15,7 @@ function LichessCallbackInner() {
     handled.current = true;
 
     const code = searchParams.get("code");
+    const state = searchParams.get("state");
     const errorParam = searchParams.get("error");
 
     if (errorParam) {
@@ -23,6 +24,12 @@ function LichessCallbackInner() {
     }
     if (!code) {
       setError("No authorization code received from Lichess.");
+      return;
+    }
+
+    const storedState = sessionStorage.getItem("lichess_state");
+    if (!state || !storedState || state !== storedState) {
+      setError("OAuth state mismatch — request may have been tampered with.");
       return;
     }
 

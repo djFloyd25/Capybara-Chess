@@ -35,16 +35,40 @@ export function setProvider(provider: string): void {
   localStorage.setItem(PROVIDER_KEY, provider);
 }
 
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const base64url = token.split(".")[1];
+  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+  // atob requires padding — base64url strings omit it
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  return JSON.parse(atob(padded));
+}
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = decodeJwtPayload(token);
+    return typeof payload.exp === "number" && (payload.exp as number) * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+}
+
 export function isLoggedIn(): boolean {
-  return !!getToken();
+  const token = getToken();
+  if (!token) return false;
+  if (isTokenExpired(token)) {
+    clearToken();
+    return false;
+  }
+  return true;
 }
 
 export function getUsernameFromToken(): string | null {
   const token = getToken();
-  if (!token) return null;
+  if (!token || isTokenExpired(token)) return null;
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub ?? null;
+    const payload = decodeJwtPayload(token);
+    return typeof payload.sub === "string" ? payload.sub : null;
   } catch {
     return null;
   }
@@ -64,6 +88,60 @@ export async function oauthLogin(data: {
     setToken(result.jwt);
     setProvider(data.provider);
   }
+}
+
+export async function importGames(
+  platform: string,
+  username: string
+): Promise<{ gameCount: number; platform: string }> {
+  return authFetch("/study/import", {
+    method: "POST",
+    body: JSON.stringify({ platform, username }),
+  });
+}
+
+export async function generateStudyPlan(): Promise<StudyPlan> {
+  return authFetch("/study/generate", { method: "POST" });
+}
+
+export async function getStudyPlan(): Promise<StudyPlan | null> {
+  try {
+    return await authFetch("/study/plan");
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export interface StudyModule {
+  title: string;
+  type: string;
+  description: string;
+  lessons: string[];
+  xp: number;
+  priority: number;
+}
+
+export interface OpeningStat {
+  name: string;
+  eco: string;
+  games: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  win_rate: number;
+}
+
+export interface StudyPlan {
+  modules: StudyModule[];
+  weak_openings: OpeningStat[];
+  strong_openings: OpeningStat[];
+  stats: {
+    total_games: number;
+    win_rate: number;
+    avg_accuracy: number | null;
+    avg_centipawn_loss: number | null;
+  };
 }
 
 // Unauthenticated request — used for login/register
@@ -94,14 +172,27 @@ export async function authFetch(path: string, options: RequestInit = {}) {
       ...options.headers,
     },
   });
-  if (res.status === 401 || res.status === 403) {
+  console.debug(`[authFetch] ${options.method ?? "GET"} ${path} → ${res.status}`);
+  if (res.status === 401) {
+    const body = await res.text().catch(() => "");
+    console.error(`[authFetch] 401 body:`, body);
     clearToken();
-    window.location.href = "/login";
-    throw new ApiError("Session expired. Please log in again.", res.status);
+    throw new ApiError(`401 Unauthorized: ${body}`, res.status);
+  }
+  if (res.status === 403) {
+    const body = await res.text().catch(() => "");
+    console.error(`[authFetch] 403 body:`, body);
+    throw new ApiError(`403 Forbidden: ${body}`, res.status);
   }
   if (!res.ok) {
     const text = await res.text();
+    console.error(`[authFetch] error body:`, text);
     throw new ApiError(text || `Request failed`, res.status);
   }
-  return res.json();
+  const text = await res.text();
+  console.debug(`[authFetch] raw response text for ${path}:`, text?.slice(0, 300));
+  if (!text) return null;
+  const parsed = JSON.parse(text);
+  console.debug(`[authFetch] parsed for ${path}:`, parsed);
+  return parsed;
 }

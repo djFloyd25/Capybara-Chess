@@ -19,7 +19,9 @@ async function generateChallenge(verifier: string): Promise<string> {
 export async function startLichessOAuth() {
   const verifier = generateVerifier();
   const challenge = await generateChallenge(verifier);
+  const state = generateVerifier();
   sessionStorage.setItem("lichess_verifier", verifier);
+  sessionStorage.setItem("lichess_state", state);
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -28,6 +30,7 @@ export async function startLichessOAuth() {
     scope: "preference:read",
     code_challenge: challenge,
     code_challenge_method: "S256",
+    state,
   });
 
   window.location.href = `https://lichess.org/oauth?${params}`;
@@ -60,5 +63,6 @@ export async function completeLichessOAuth(code: string): Promise<{ id: string; 
   const user = await userRes.json();
 
   sessionStorage.removeItem("lichess_verifier");
+  sessionStorage.removeItem("lichess_state");
   return { id: user.id, username: user.username };
 }

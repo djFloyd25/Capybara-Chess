@@ -1,7 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,15 +8,22 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import CapybaraMascot from "@/components/CapybaraMascot";
-import { getUsernameFromToken, getProvider } from "@/lib/api";
+import { getUsernameFromToken, getProvider, importGames, generateStudyPlan, getStudyPlan, ApiError, type StudyPlan } from "@/lib/api";
 import {
   Flame, Trophy, BookOpen, Brain, Swords, ChevronRight,
-  Upload, CheckCircle2, TrendingUp, Calendar, Star, Zap
+  Upload, CheckCircle2, TrendingUp, Calendar, Star, Zap, AlertTriangle, Target
 } from "lucide-react";
 
-const DAILY_LESSONS = [
-  { id: 1, title: "Sicilian Defense",        type: "Opening",  xp: 20, done: true,  icon: BookOpen },
-  { id: 2, title: "Pin Tactics",             type: "Tactics",  xp: 30, done: true,  icon: Brain },
+const MODULE_ICON: Record<string, React.ElementType> = {
+  Weakness: AlertTriangle,
+  Tactics:  Brain,
+  Endgame:  Target,
+  Opening:  BookOpen,
+};
+
+const PLACEHOLDER_LESSONS = [
+  { id: 1, title: "Sicilian Defense",        type: "Opening",  xp: 20, done: false, icon: BookOpen },
+  { id: 2, title: "Pin Tactics",             type: "Tactics",  xp: 30, done: false, icon: Brain },
   { id: 3, title: "Rook Endgames",           type: "Endgame",  xp: 25, done: false, icon: Trophy },
   { id: 4, title: "Pawn Structure Analysis", type: "Strategy", xp: 20, done: false, icon: TrendingUp },
 ];
@@ -35,15 +41,37 @@ const ACHIEVEMENTS = [
 type Platform = "lichess" | "chess.com";
 
 export default function HomePage() {
-  const username = getUsernameFromToken();
-  const provider  = getProvider();
-  const isLichess = provider === "lichess";
-
+  const [username, setUsername] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
   const [platform, setPlatform] = useState<Platform>("lichess");
-  const [importUsername, setImportUsername] = useState(isLichess ? (username ?? "") : "");
+  const [importUsername, setImportUsername] = useState("");
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(false);
-  const [capyMessage, setCapyMessage] = useState("Good morning! You have 2 lessons left today. Let's go! 🎯");
+  const [importError, setImportError] = useState<string | null>(null);
+  const [studyPlan, setStudyPlan] = useState<StudyPlan | null>(null);
+  const [capyMessage, setCapyMessage] = useState("Good morning! Ready to improve your chess? 🎯");
+
+  useEffect(() => {
+    const u = getUsernameFromToken();
+    const p = getProvider();
+    setUsername(u);
+    setProvider(p);
+    if (p === "lichess" && u) setImportUsername(u);
+  }, []);
+
+  useEffect(() => {
+    getStudyPlan().then((plan) => {
+      if (plan) {
+        setStudyPlan(plan);
+        setImported(true);
+        setCapyMessage(`You have ${plan.modules.length} modules ready. Let's train! 🎯`);
+      }
+    }).catch((err) => {
+      console.error("[home] getStudyPlan on mount failed:", err);
+    });
+  }, []);
+
+  const isLichess = provider === "lichess";
 
   const handlePlatformSwitch = (p: Platform) => {
     setPlatform(p);
@@ -54,14 +82,39 @@ export default function HomePage() {
   const handleImport = async () => {
     if (!importUsername.trim()) return;
     setImporting(true);
-    await new Promise((r) => setTimeout(r, 1800));
-    setImporting(false);
-    setImported(true);
-    setCapyMessage(`Found your games from ${platform}! Great work, ${importUsername}! 🎉`);
+    setImportError(null);
+    try {
+      const result = await importGames(platform, importUsername);
+      console.log("[import] importGames succeeded:", result);
+      try {
+        const plan = await generateStudyPlan();
+        setStudyPlan(plan);
+        setCapyMessage(`Imported ${result.gameCount} games from ${platform}! Study plan ready. 🎉`);
+      } catch (err) {
+        console.error("[import] generateStudyPlan failed:", err);
+        setImportError(`[generateStudyPlan] status=${err instanceof ApiError ? err.status : "?"} msg=${err instanceof Error ? err.message : String(err)}`);
+        setCapyMessage(`Imported ${result.gameCount} games! Generate step failed — see error above.`);
+      }
+      setImported(true);
+    } catch (err) {
+      console.error("[import] importGames failed:", err);
+      setImportError(`[importGames] status=${err instanceof ApiError ? err.status : "?"} msg=${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+    }
   };
 
-  const completedCount = DAILY_LESSONS.filter((l) => l.done).length;
-  const dailyProgress = (completedCount / DAILY_LESSONS.length) * 100;
+  const dailyLessons = studyPlan?.modules.slice(0, 4).map((mod, i) => ({
+    id: i + 1,
+    title: mod.title,
+    type: mod.type,
+    xp: mod.xp,
+    done: false,
+    icon: MODULE_ICON[mod.type] ?? Brain,
+  })) ?? PLACEHOLDER_LESSONS;
+
+  const completedCount = dailyLessons.filter((l) => l.done).length;
+  const dailyProgress = (completedCount / dailyLessons.length) * 100;
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -83,10 +136,10 @@ export default function HomePage() {
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Day Streak",   value: "7",   icon: Flame,     color: "text-orange-500", bg: "bg-orange-50" },
-          { label: "Total XP",     value: "420", icon: Zap,       color: "text-accent",      bg: "bg-amber-50"  },
-          { label: "Games Played", value: "148", icon: Swords,    color: "text-primary",     bg: "bg-teal/10"   },
-          { label: "Puzzles Done", value: "32",  icon: Brain,     color: "text-sage",        bg: "bg-sage/10"   },
+          { label: "Day Streak",   value: "—",                                                          icon: Flame,  color: "text-orange-500", bg: "bg-orange-50" },
+          { label: "Win Rate",     value: studyPlan ? `${Math.round(studyPlan.stats.win_rate * 100)}%` : "—", icon: Zap,    color: "text-accent",      bg: "bg-amber-50"  },
+          { label: "Games Played", value: studyPlan ? String(studyPlan.stats.total_games) : "—",              icon: Swords, color: "text-primary",     bg: "bg-teal/10"   },
+          { label: "Avg Accuracy", value: studyPlan?.stats.avg_accuracy != null ? `${Math.round(studyPlan.stats.avg_accuracy)}%` : "—", icon: Brain, color: "text-sage", bg: "bg-sage/10" },
         ].map(({ label, value, icon: Icon, color, bg }, i) => (
           <motion.div
             key={label}
@@ -124,14 +177,14 @@ export default function HomePage() {
                     Daily Lessons
                   </CardTitle>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-text-muted">{completedCount}/{DAILY_LESSONS.length} done</span>
+                    <span className="text-xs text-text-muted">{completedCount}/{dailyLessons.length} done</span>
                     <Progress value={dailyProgress} className="w-20 h-2" shimmer />
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {DAILY_LESSONS.map((lesson, i) => (
+                  {dailyLessons.map((lesson, i) => (
                     <motion.div
                       key={lesson.id}
                       initial={{ opacity: 0, x: -12 }}
@@ -215,7 +268,7 @@ export default function HomePage() {
                       <CheckCircle2 size={24} className="text-success flex-shrink-0" />
                       <div>
                         <p className="font-semibold text-text">Games imported!</p>
-                        <p className="text-sm text-text-muted">Your personalized study plan is being generated...</p>
+                        <p className="text-sm text-text-muted">Your personalized study plan is ready.</p>
                       </div>
                       <Button
                         variant="outline"
@@ -239,6 +292,11 @@ export default function HomePage() {
                           ? "Pull your recent Lichess games to generate a personalized study plan."
                           : "Enter your Chess.com username to pull your recent games and generate a personalized study plan."}
                       </p>
+                      {importError && (
+                        <p className="text-sm text-danger bg-danger/10 border border-danger/20 rounded-[var(--radius-sm)] px-3 py-2 mb-3">
+                          {importError}
+                        </p>
+                      )}
                       <div className="flex gap-3">
                         <Input
                           placeholder={platform === "lichess" ? "Your Lichess username" : "Your Chess.com username"}
